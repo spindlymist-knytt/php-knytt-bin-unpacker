@@ -98,6 +98,18 @@ $files = knytt_bin\list_all_files($reader, $options);
 Every public function in `knytt_bin` accepts an optional `$options` parameter. See the documentation for
 `ParseOptions` for more details.
 
+## Security
+
+There are potential security risks associated with unpacking user-provided .knytt.bin files. This library has the
+following checks in place to mitigate risk:
+
+- Paths are limited to 256 bytes in length by default. This prevents reading an unbounded amount of data into memory
+  if the file is corrupt or constructed with malicious intent.
+- Paths containing `..` as a component are rejected and will raise an exception.
+- Absolute paths such as `/path/to/file` and `C:\path\to\file` are rejected and will raise an exception.
+- The `extract_*` functions accept a `$max_file_size` parameter that limits the number of bytes that may be extracted
+  for a single file. An exception will be raised if that limit would be exceeded. The default is 256 MiB.
+
 ## Benchmarks
 
 This isn't particularly scientific, but here are the results of running the benchmarks on the entire library
