@@ -25,7 +25,7 @@ class ParseOptions {
     public ?string $convert_to_encoding;
 
     /**
-     * @var bool If true, paths will be converted to Unix-style separators (forward slash). Defaults to `true`.
+     * @var bool If `true`, paths will be converted to Unix-style separators (forward slash). Defaults to `true`.
      */
     public bool $force_unix_separator;
 
@@ -295,8 +295,8 @@ function map_all_files(IReader $reader, callable $map_func, ?ParseOptions $optio
  *     first byte of the next header). If any file is not found, the entire reader will be consumed.
  * @param array<string> $paths The list of paths to map.
  * @param callable(string, string):bool $comp_func A function to compare paths. The first parameter is
- *     the entry in $paths. The second parameter is the . The function should return true if the paths
- *     are the same. This enables case-insensitive comparisons.
+ *     the entry in $paths. The second parameter is the path from the header. The function should return `true`
+ *     if the paths are the same. This enables case-insensitive comparisons.
  * @param callable(string, Header, IReader):mixed $map_func A function that will be called for each file header.
  *     The first parameter is the path of the file as specified in $paths. The second parameter is the entire header.
  *     The third parameter is a reader pointing to the first byte of the file's contents. The function may consume
