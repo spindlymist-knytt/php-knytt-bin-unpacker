@@ -73,13 +73,12 @@ try {
         $files = knytt_bin\extract_all_files($reader, "./output/{$number}/{$file_name}");
     });
 
-    // benchmark("Extract all files from {$bin_count} levels", function ($number) use ($knytt_bins) {
-    //     foreach ($knytt_bins as $file_name) {
-    //         $level_name = substr($file_name, 0, -10);
-    //         $reader = new knytt_bin\SimpleReader("input/{$file_name}");
-    //         $files = knytt_bin\extract_all_files($reader, "./output/{$number}/{$file_name}");
-    //     }
-    // });
+    benchmark("Extract all files from {$bin_count} levels", function ($number) use ($knytt_bins) {
+        foreach ($knytt_bins as $file_name) {
+            $reader = new knytt_bin\SimpleReader("input/{$file_name}");
+            $files = knytt_bin\extract_all_files($reader, "./output/{$number}/{$file_name}");
+        }
+    });
 }
 catch(knytt_bin\KnyttBinException $e) {
     echo "KnyttBinException: " . $e->getMessage();

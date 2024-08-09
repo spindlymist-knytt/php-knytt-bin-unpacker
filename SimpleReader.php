@@ -41,15 +41,21 @@ class SimpleReader implements IReader {
         }
     }
 
-    public function read_until(string $terminator): ?string {
+    public function read_until(string $terminator, int $max_len): ?string {
         $result = "";
         
+        $bytes_read = 0;
         $next_byte = fgetc($this->file);
         if ($next_byte === false) {
             return null;
         }
-        
+
         while ($next_byte !== $terminator) {
+            $bytes_read += 1;
+            if ($bytes_read > $max_len) {
+                return null;
+            }
+
             $result .= $next_byte;
             
             $next_byte = fgetc($this->file);
