@@ -88,11 +88,10 @@ $files = knytt_bin\extract_files(
 The parser has a few options that can be overridden with a `knytt_bin\ParseOptions` object. For example:
 
 ```php
-$options = new knytt_bin\ParseOptions(
-    "UTF-8", // convert paths to UTF-8 encoding
-    false,   // don't convert paths to Unix-style
-    512      // allow paths to be up to 512 bytes
-);
+$options = new knytt_bin\ParseOptions();
+$options->convert_to_encoding = "UTF-8"; // Convert paths to UTF-8
+$options->force_unix_paths = false;      // Don't replace \ in paths with /
+$options->max_path_len = 512;            // Allow paths to be up to 512 bytes
 $files = knytt_bin\list_all_files($reader, $options);
 ```
 
