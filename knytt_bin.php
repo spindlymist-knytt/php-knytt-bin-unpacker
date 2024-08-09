@@ -144,10 +144,6 @@ function parse_header(IReader $reader, ParseOptions $options): ?Header {
  * @returns array<string, Header> A dictionary of file paths to headers.
  */
 function list_all_files(IReader $reader, ?ParseOptions $options = null): array {
-    if ($options === null) {
-        $options = new ParseOptions();
-    }
-
     return map_all_files(
         $reader,
         function ($path, $header, $reader) {
@@ -271,7 +267,7 @@ function map_all_files(IReader $reader, callable $map_func, ?ParseOptions $optio
         $options = new ParseOptions();
     }
 
-    $header = parse_header($reader, $options); // Skip first header
+    parse_header($reader, $options); // Skip first header
 
     $results = [];
     $header = parse_header($reader, $options);
