@@ -63,7 +63,7 @@ interface IReader {
  * @throws KnyttBinException If the header is invalid or the path is forbidden. A path is forbidden if
  *     any component is .. or if it is absolute.
  *
- * @returns ?Header The header that was parsed, or null if there are no bytes left in the reader.
+ * @return ?Header The header that was parsed, or null if there are no bytes left in the reader.
  */
 function parse_header(IReader $reader, ParseOptions $options): ?Header {
     // Check signature. Should always be NF
@@ -141,7 +141,7 @@ function parse_header(IReader $reader, ParseOptions $options): ?Header {
  * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @returns array<string, Header> A dictionary of file paths to headers.
+ * @return array<string, Header> A dictionary of file paths to headers.
  */
 function list_all_files(IReader $reader, ?ParseOptions $options = null): array {
     return map_all_files(
@@ -163,7 +163,7 @@ function list_all_files(IReader $reader, ?ParseOptions $options = null): array {
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @returns array<string, Header> A dictionary of file paths to headers. Excludes paths that are not found.
+ * @return array<string, Header> A dictionary of file paths to headers. Excludes paths that are not found.
  */
 function find_files(
     IReader $reader,
@@ -192,7 +192,7 @@ function find_files(
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @returns ?Header The header for that file, or `null` if it was not found.
+ * @return ?Header The header for that file, or `null` if it was not found.
  */
 function find_one_file(
     IReader $reader,
@@ -218,7 +218,7 @@ function find_one_file(
  *     created if it does not exist. Defaults to the current working directory.
  * @param int $max_file_size (optional) The maximum number of bytes allowed to be extracted for a single file. A
  *     `KnyttBinException` will be raised if a file is too large. Defaults to 256 MiB.
- * @param ?callable(string):string $map_path_func (optional) A function that maps each path to a new one.
+ * @param ?callable(string): string $map_path_func (optional) A function that maps each path to a new one.
  *     This could be used to add the level's name as prefix or normalize case, for example. The mapped
  *     path is relative to `$output_dir`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
@@ -251,7 +251,7 @@ function extract_all_files(
  * @param int $max_file_size (optional) The maximum number of bytes allowed to be extracted for a single file. A
  *     `KnyttBinException` will be raised if a file is too large. Defaults to 256 MiB.
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to false.
- * @param ?callable(string):string $map_path_func (optional) A function that maps each path to a new one.
+ * @param ?callable(string): string $map_path_func (optional) A function that maps each path to a new one.
  *     This could be used to add the level's name as prefix or normalize case, for example. The mapped
  *     path is relative to $output_dir.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
@@ -289,7 +289,7 @@ function extract_files(
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @returns ?Header The header for that file, or `null` if it was not found.
+ * @return ?Header The header for that file, or `null` if it was not found.
  */
 function extract_one_file(
     IReader $reader,
@@ -324,7 +324,7 @@ function extract_one_file(
  * Executes a function for each file in a .knytt.bin file and collects the results in a dictionary.
  *
  * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
- * @param callable(string, Header, IReader):mixed $map_func A function that will be called for each file header.
+ * @param callable(string, Header, IReader): mixed $map_func A function that will be called for each file header.
  *     The first parameter is the path of the file. The second parameter is the entire header. The third parameter
  *     is a reader pointing to the first byte of the file's contents. The function may consume zero or more bytes,
  *     but must not consume more bytes than the header's size. The return value of the function will be added to
@@ -365,10 +365,10 @@ function map_all_files(IReader $reader, callable $map_func, ?ParseOptions $optio
  *     be consumed for each file up to and including the last one found (the reader will point to the
  *     first byte of the next header). If any file is not found, the entire reader will be consumed.
  * @param array<string> $paths The list of paths to map.
- * @param callable(string, string):bool $comp_func A function to compare paths. The first parameter is
+ * @param callable(string, string): bool $comp_func A function to compare paths. The first parameter is
  *     the entry in $paths. The second parameter is the path from the header. The function should return `true`
  *     if the paths are the same. This enables case-insensitive comparisons.
- * @param callable(string, Header, IReader):mixed $map_func A function that will be called for each file header.
+ * @param callable(string, Header, IReader): mixed $map_func A function that will be called for each file header.
  *     The first parameter is the path of the file as specified in $paths. The second parameter is the entire header.
  *     The third parameter is a reader pointing to the first byte of the file's contents. The function may consume
  *     zero or more bytes, but must not consume more bytes than the header's size. The return value of the function
