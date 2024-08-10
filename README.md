@@ -28,7 +28,9 @@ print_r($files);
 //             [size] => 200911
 //             [offset] => 51
 //         )
-// ... etc. ...
+//
+// ... and so on ...
+//
 //     [World.ini] => knytt_bin\Header Object
 //         (
 //             [path] => World.ini
@@ -81,6 +83,15 @@ $files = knytt_bin\extract_files(
     ["Icon.png", "World.ini"],
     "path/to/Nifflas - The Machine"
 );
+
+// Check if a file was not found. The array key will be the one you provided when
+// you called `extract_files` even if the matched file is capitalized differently
+if (!array_key_exists("Icon.png", $files)) {
+    echo "Icon.png is missing!";
+}
+else {
+    echo "Found Icon.png and it was " . $files["Icon.png"]->size . " bytes.";
+}
 ```
 
 ## Configuration
