@@ -48,10 +48,10 @@ $reader = new knytt_bin\SimpleReader("Nifflas - The Machine.knytt.bin");
 $header = knytt_bin\find_one_file($reader, "Icon.png");
 
 if ($header !== null) {
-    echo "Found Icon.png and it is " . $header->size . " bytes.\n";
+    echo "Found Icon.png " . $header->offset . " bytes from the start of the file.";
 }
 else {
-    echo "Icon.png is missing!\n";
+    echo "Icon.png is missing!";
 }
 ```
 
@@ -95,10 +95,10 @@ $reader = new knytt_bin\SimpleReader("Nifflas - The Machine.knytt.bin");
 $header = knytt_bin\extract_one_file($reader, "Icon.png", "Nifflas - The Machine.png", "path/to/files");
 
 if ($header !== null) {
-    echo "Extracted Icon.png and it was " . $header->size . " bytes.\n";
+    echo "Extracted Icon.png and it was " . $header->size . " bytes.";
 }
 else {
-    echo "Icon.png is missing!\n";
+    echo "Icon.png is missing!";
 }
 ```
 
