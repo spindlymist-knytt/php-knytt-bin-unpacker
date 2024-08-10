@@ -223,7 +223,7 @@ function find_one_file(
  *     path is relative to `$output_dir`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string, Header> A dictionary of file paths to sizes in bytes.
+ * @return array<string, Header> A dictionary of file paths to headers.
  */
 function extract_all_files(
     IReader $reader,
@@ -256,8 +256,7 @@ function extract_all_files(
  *     path is relative to $output_dir.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string, Header> A dictionary of file paths to sizes in bytes. Excludes paths that are
- *     not found.
+ * @return array<string, Header> A dictionary of file paths to headers. Excludes paths that are not found.
  */
 function extract_files(
     IReader $reader,
