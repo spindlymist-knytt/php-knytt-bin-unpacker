@@ -154,7 +154,7 @@ function list_all_files(IReader $reader, ?ParseOptions $options = null): array {
 }
 
 /**
- * Reads and parses headers for specified paths in a .knytt.bin file.
+ * Parses headers for specified paths in a .knytt.bin file.
  *
  * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
  *     be consumed for each file up to and including the last one found (the reader will point to the
@@ -180,6 +180,42 @@ function find_files(
         },
         $options
     );
+}
+
+/**
+ * Parses the header for a single file in a .knytt.bin file.
+ *
+ * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
+ *     be consumed up to and including the matching entry (the reader will point to the first byte of the
+ *     next header). If the file is not found, the entire reader will be consumed.
+ * @param string $path The path to search for.
+ * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
+ * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
+ *
+ * @returns ?Header The header for that file, or `null` if it was not found.
+ */
+function find_one_file(
+    IReader $reader,
+    string $path,
+    bool $case_sensitive = false,
+    ?ParseOptions $options = null
+): ?Header {
+    $matches = map_files(
+        $reader,
+        [$path],
+        __make_comp_func($case_sensitive),
+        function ($path, $header, $reader) {
+            return $header;
+        },
+        $options
+    );
+
+    if (array_key_exists($path, $matches)) {
+        return $matches[$path];
+    }
+    else {
+        return null;
+    }
 }
 
 /**
@@ -247,6 +283,50 @@ function extract_files(
         __make_extract_func($output_dir, $max_file_size, $map_path_func),
         $options
     );
+}
+
+/**
+ * Extracts a single file from a .knytt.bin file.
+ *
+ * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
+ *     be consumed up to and including the matching entry (the reader will point to the first byte of the
+ *     next header). If the file is not found, the entire reader will be consumed.
+ * @param string $path The path of the file to extract.
+ * @param string $output_path The path to write the extracted file to, relative to the output directory.
+ * @param string $output_dir (optional) The directory to extract the file to. The directory will be
+ *     created if it does not exist. Defaults to the current working directory.
+ * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
+ * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
+ *
+ * @returns ?Header The header for that file, or `null` if it was not found.
+ */
+function extract_one_file(
+    IReader $reader,
+    string $path,
+    string $output_path,
+    string $output_dir = ".",
+    int $max_file_size = 256 * 1024 * 1024,
+    bool $case_sensitive = false,
+    ?ParseOptions $options = null
+): ?Header {
+    $map_path_func = function ($path) use ($output_path) {
+        return $output_path;
+    };
+
+    $matches = map_files(
+        $reader,
+        [$path],
+        __make_comp_func($case_sensitive),
+        __make_extract_func($output_dir, $max_file_size, $map_path_func),
+        $options
+    );
+
+    if (array_key_exists($path, $matches)) {
+        return $matches[$path];
+    }
+    else {
+        return null;
+    }
 }
 
 /**
@@ -385,9 +465,11 @@ function __make_extract_func(string $output_dir, int $max_file_size, ?callable $
 
         $mapped_path = call_user_func($map_path_func, $path);
         $output_path = __join_paths($output_dir, $mapped_path);
+        
         __create_parent_dir($output_path);
+        $reader->copy_to_file($output_path, $header->size);
 
-        return $reader->copy_to_file($output_path, $header->size);
+        return $header;
     };
 }
 

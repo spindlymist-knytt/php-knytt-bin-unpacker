@@ -41,6 +41,20 @@ print_r($files);
 // )
 ```
 
+### Get header for a single file
+
+```php
+$reader = new knytt_bin\SimpleReader("Nifflas - The Machine.knytt.bin");
+$header = knytt_bin\find_one_file($reader, "Icon.png");
+
+if ($header !== null) {
+    echo "Found Icon.png and it is " . $header->size . " bytes.\n";
+}
+else {
+    echo "Icon.png is missing!\n";
+}
+```
+
 ### Get headers for specific files
 
 ```php
@@ -74,6 +88,20 @@ $reader = new knytt_bin\SimpleReader("Nifflas - The Machine.knytt.bin");
 $files = knytt_bin\extract_all_files($reader, "path/to/Nifflas - The Machine");
 ```
 
+### Extract one file
+
+```php
+$reader = new knytt_bin\SimpleReader("Nifflas - The Machine.knytt.bin");
+$header = knytt_bin\extract_one_file($reader, "Icon.png", "Nifflas - The Machine.png", "path/to/files");
+
+if ($header !== null) {
+    echo "Extracted Icon.png and it was " . $header->size . " bytes.\n";
+}
+else {
+    echo "Icon.png is missing!\n";
+}
+```
+
 ### Extract specific files
 
 ```php
@@ -87,7 +115,7 @@ $files = knytt_bin\extract_files(
 // Check whether a file was found. The array key will be the one provided when
 // calling extract_files even if the matched file is capitalized differently.
 if (array_key_exists("Icon.png", $files)) {
-    echo "Found Icon.png and it was " . $files["Icon.png"]->size . " bytes.";
+    echo "Extracted Icon.png and it was " . $files["Icon.png"]->size . " bytes.";
 }
 else {
     echo "Icon.png is missing!";
