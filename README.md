@@ -84,14 +84,49 @@ $files = knytt_bin\extract_files(
     "path/to/Nifflas - The Machine"
 );
 
-// Check if a file was not found. The array key will be the one you provided when
-// you called `extract_files` even if the matched file is capitalized differently
-if (!array_key_exists("Icon.png", $files)) {
-    echo "Icon.png is missing!";
-}
-else {
+// Check whether a file was found. The array key will be the one provided when
+// calling extract_files even if the matched file is capitalized differently.
+if (array_key_exists("Icon.png", $files)) {
     echo "Found Icon.png and it was " . $files["Icon.png"]->size . " bytes.";
 }
+else {
+    echo "Icon.png is missing!";
+}
+```
+
+### Extract files with extra options
+
+```php
+$level_name = "Nifflas - The Machine";
+$reader = new knytt_bin\SimpleReader("{$level_name}.knytt.bin");
+
+// Set a maximum file size in bytes (default: 256 MiB)
+$max_file_size = 2 * 1024 * 1024;
+
+// Turn case sensitivity on or off (default: off)
+$case_sensitive = false;
+
+// Takes a path that was found and returns a path to write the file to.
+// The returned path is relative to the output directory.
+// $path will be the one provided when calling extract_files even if the
+// matched file is capitalized differently.
+$map_path_func = function ($path) use ($level_name) {
+    if ($path == "Icon.png") {
+        return "{$level_name}.png";
+    }
+    else {
+        return "{$level_name}.ini";
+    }
+};
+
+$files = knytt_bin\extract_files(
+    $reader,
+    ["Icon.png", "World.ini"],
+    "path/to/files",
+    $max_file_size,
+    $case_sensitive,
+    $map_path_func
+);
 ```
 
 ## Configuration
