@@ -200,18 +200,10 @@ function find_one_file(
     bool $case_sensitive = false,
     ?ParseOptions $options = null
 ): ?Header {
-    $matches = map_files(
-        $reader,
-        [$path],
-        __make_comp_func($case_sensitive),
-        function ($path, $header, $reader) {
-            return $header;
-        },
-        $options
-    );
+    $files = find_files($reader, [$path], $case_sensitive, $options);
 
-    if (array_key_exists($path, $matches)) {
-        return $matches[$path];
+    if (array_key_exists($path, $files)) {
+        return $files[$path];
     }
     else {
         return null;
@@ -309,20 +301,20 @@ function extract_one_file(
     bool $case_sensitive = false,
     ?ParseOptions $options = null
 ): ?Header {
-    $map_path_func = function ($path) use ($output_path) {
-        return $output_path;
-    };
-
-    $matches = map_files(
+    $files = extract_files(
         $reader,
         [$path],
-        __make_comp_func($case_sensitive),
-        __make_extract_func($output_dir, $max_file_size, $map_path_func),
+        $output_dir,
+        $max_file_size,
+        $case_sensitive,
+        function ($path) use ($output_path) {
+            return $output_path;
+        },
         $options
     );
 
-    if (array_key_exists($path, $matches)) {
-        return $matches[$path];
+    if (array_key_exists($path, $files)) {
+        return $files[$path];
     }
     else {
         return null;
