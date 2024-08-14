@@ -77,6 +77,12 @@ class SimpleReader implements IReader {
         return $result;
     }
 
+    public function seek(int $offset, int $whence = SEEK_SET) {
+        if (fseek($this->file, $offset, $whence) !== 0) {
+            throw new ReaderException("fseek failed");
+        }
+    }
+
     public function skip(int $n_bytes): void {
         if (fseek($this->file, $n_bytes, SEEK_CUR) !== 0) {
             throw new ReaderException("fseek failed");
