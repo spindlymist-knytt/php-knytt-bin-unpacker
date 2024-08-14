@@ -554,6 +554,59 @@ function extract_one_file(
     }
 }
 
+ /**
+ * Returns `true` if a .knytt.bin appears to contain a valid level.
+ *
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
+ * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
+ *
+ * @return array<string, Header> A dictionary of file paths to headers.
+ */
+function is_valid_level(IReader $reader, ?ParseOptions $options = null): bool {
+    try {
+        validate_level($reader, $options);
+        return true;
+    }
+    catch (KnyttBinException $e) {
+        return false;
+    }
+}
+
+ /**
+ * Parses the headers in a .knytt.bin if it appears to contain a valid level. If it is invalid, throws
+ * a `KnyttBinException`.
+ *
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
+ * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
+ *
+ * @return array<string, Header> A dictionary of file paths to headers.
+ */
+function validate_level(IReader $reader, ?ParseOptions $options = null): array {
+    $headers = list_all_files($reader, $options);
+
+    $has_world_ini = false;
+    $has_map_bin = false;
+
+    foreach ($headers as $header) {
+        if (!$has_map_bin && strcasecmp($header->path, "Map.bin") === 0) {
+            $has_map_bin = true;
+        }
+        if (!$has_world_ini && strcasecmp($header->path, "World.ini") === 0) {
+            $has_world_ini = true;
+        }
+    }
+
+    if(!$has_world_ini) {
+        throw new KnyttBinException("Invalid level: World.ini is missing");
+    }
+
+    if (!$has_map_bin) {
+        throw new KnyttBinException("Invalid level: Map.bin is missing");
+    }
+
+    return $headers;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback helpers
 ////////////////////////////////////////////////////////////////////////////////////////////////////
