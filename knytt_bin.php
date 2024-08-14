@@ -17,6 +17,14 @@ class Header {
     }
 }
 
+interface IReader {
+    public function read_until(string $terminator, int $max_len): ?string;
+    public function read(int $n_bytes): string;
+    public function skip(int $n_bytes): void;
+    public function tell(): int;
+    public function copy_to_file(string $path, int $n_bytes, int $buffer_size): int;
+}
+
 class ParseOptions {
     /**
      * @var ?string If non-null, paths will be converted to the specified character encoding. The encoding
@@ -118,14 +126,6 @@ class ParseOptions {
     }
 }
 
-interface IReader {
-    public function read_until(string $terminator, int $max_len): ?string;
-    public function read(int $n_bytes): string;
-    public function skip(int $n_bytes): void;
-    public function tell(): int;
-    public function copy_to_file(string $path, int $n_bytes, int $buffer_size): int;
-}
-
 /**
  * Parses and validates .knytt.bin header from a reader.
  * 
@@ -213,6 +213,103 @@ function parse_header(IReader $reader, ParseOptions $options): ?Header {
     $file_size = $file_size["size"];
 
     return new Header($path, $file_size, $reader->tell());
+}
+
+/**
+ * Executes a function for each file in a .knytt.bin file and collects the results in a dictionary.
+ *
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
+ * @param callable(string, Header, IReader): mixed $map_func A function that will be called for each file header.
+ *     The first parameter is the path of the file. The second parameter is the entire header. The third parameter
+ *     is a reader pointing to the first byte of the file's contents. The function may consume zero or more bytes,
+ *     but must not consume more bytes than the header's size. The return value of the function will be added to
+ *     the dictionary under the file's path.
+ * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
+ *
+ * @return array<string, mixed> A dictionary of file paths to $map_func return values.
+ */
+function map_all_files(IReader $reader, callable $map_func, ?ParseOptions $options = null): array {
+    if ($options === null) {
+        $options = new ParseOptions();
+    }
+
+    parse_header($reader, $options); // Skip first header
+
+    $results = [];
+    $header = parse_header($reader, $options);
+
+    while ($header !== null) {
+        $results[$header->path] = call_user_func($map_func, $header->path, $header, $reader);
+
+        $n_bytes_consumed = $reader->tell() - $header->offset;
+        if ($n_bytes_consumed > $header->size) {
+            throw new KnyttBinException("Map function consumed more bytes than the file contained");
+        }
+        
+        $reader->skip($header->size - $n_bytes_consumed);
+        $header = parse_header($reader, $options);
+    }
+
+    return $results;
+}
+
+/**
+ * Executes a function for specified paths in a .knytt.bin file and collects the results in a dictionary.
+ *
+ * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
+ *     be consumed for each file up to and including the last one found (the reader will point to the
+ *     first byte of the next header). If any file is not found, the entire reader will be consumed.
+ * @param array<string> $paths The list of paths to map.
+ * @param callable(string, string): bool $comp_func A function to compare paths. The first parameter is
+ *     the entry in $paths. The second parameter is the path from the header. The function should return `true`
+ *     if the paths are the same. This enables case-insensitive comparisons.
+ * @param callable(string, Header, IReader): mixed $map_func A function that will be called for each file header.
+ *     The first parameter is the path of the file as specified in $paths. The second parameter is the entire header.
+ *     The third parameter is a reader pointing to the first byte of the file's contents. The function may consume
+ *     zero or more bytes, but must not consume more bytes than the header's size. The return value of the function
+ *     will be added to the dictionary under the file's path as specified in $paths.
+ * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
+ *
+ * @return array<string, mixed> A dictionary of file paths to $map_func return values. The keys will be
+ *     those specified in $paths, not those in the .knytt.bin file. Excludes paths that are not found.
+ */
+function map_files(
+    IReader $reader,
+    array $paths,
+    callable $comp_func,
+    callable $map_func,
+    ?ParseOptions $options = null
+): array {
+    if ($options === null) {
+        $options = new ParseOptions();
+    }
+
+    parse_header($reader, $options); // Skip first header
+
+    $results = [];
+    $n_remaining = count($paths);
+    $header = parse_header($reader, $options);
+    
+    while ($header !== null && $n_remaining > 0) {
+        [$key, $path] = __match_first($header->path, $paths, $comp_func);
+
+        if ($path !== null) {
+            $results[$path] = call_user_func($map_func, $path, $header, $reader);
+
+            unset($paths[$key]);
+            $n_remaining--;
+        }
+        
+        $n_bytes_consumed = $reader->tell() - $header->offset;
+        if ($n_bytes_consumed > $header->size) {
+            throw new KnyttBinException("Map function consumed more bytes than the file contained");
+        }
+        
+        $reader->skip($header->size - $n_bytes_consumed);
+        $header = parse_header($reader, $options);
+    }
+
+    return $results;
 }
 
 /**
@@ -455,103 +552,6 @@ function extract_one_file(
     else {
         return null;
     }
-}
-
-/**
- * Executes a function for each file in a .knytt.bin file and collects the results in a dictionary.
- *
- * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
- * @param callable(string, Header, IReader): mixed $map_func A function that will be called for each file header.
- *     The first parameter is the path of the file. The second parameter is the entire header. The third parameter
- *     is a reader pointing to the first byte of the file's contents. The function may consume zero or more bytes,
- *     but must not consume more bytes than the header's size. The return value of the function will be added to
- *     the dictionary under the file's path.
- * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
- *
- * @return array<string, mixed> A dictionary of file paths to $map_func return values.
- */
-function map_all_files(IReader $reader, callable $map_func, ?ParseOptions $options = null): array {
-    if ($options === null) {
-        $options = new ParseOptions();
-    }
-
-    parse_header($reader, $options); // Skip first header
-
-    $results = [];
-    $header = parse_header($reader, $options);
-
-    while ($header !== null) {
-        $results[$header->path] = call_user_func($map_func, $header->path, $header, $reader);
-
-        $n_bytes_consumed = $reader->tell() - $header->offset;
-        if ($n_bytes_consumed > $header->size) {
-            throw new KnyttBinException("Map function consumed more bytes than the file contained");
-        }
-        
-        $reader->skip($header->size - $n_bytes_consumed);
-        $header = parse_header($reader, $options);
-    }
-
-    return $results;
-}
-
-/**
- * Executes a function for specified paths in a .knytt.bin file and collects the results in a dictionary.
- *
- * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
- *     be consumed for each file up to and including the last one found (the reader will point to the
- *     first byte of the next header). If any file is not found, the entire reader will be consumed.
- * @param array<string> $paths The list of paths to map.
- * @param callable(string, string): bool $comp_func A function to compare paths. The first parameter is
- *     the entry in $paths. The second parameter is the path from the header. The function should return `true`
- *     if the paths are the same. This enables case-insensitive comparisons.
- * @param callable(string, Header, IReader): mixed $map_func A function that will be called for each file header.
- *     The first parameter is the path of the file as specified in $paths. The second parameter is the entire header.
- *     The third parameter is a reader pointing to the first byte of the file's contents. The function may consume
- *     zero or more bytes, but must not consume more bytes than the header's size. The return value of the function
- *     will be added to the dictionary under the file's path as specified in $paths.
- * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
- *
- * @return array<string, mixed> A dictionary of file paths to $map_func return values. The keys will be
- *     those specified in $paths, not those in the .knytt.bin file. Excludes paths that are not found.
- */
-function map_files(
-    IReader $reader,
-    array $paths,
-    callable $comp_func,
-    callable $map_func,
-    ?ParseOptions $options = null
-): array {
-    if ($options === null) {
-        $options = new ParseOptions();
-    }
-
-    parse_header($reader, $options); // Skip first header
-
-    $results = [];
-    $n_remaining = count($paths);
-    $header = parse_header($reader, $options);
-    
-    while ($header !== null && $n_remaining > 0) {
-        [$key, $path] = __match_first($header->path, $paths, $comp_func);
-
-        if ($path !== null) {
-            $results[$path] = call_user_func($map_func, $path, $header, $reader);
-
-            unset($paths[$key]);
-            $n_remaining--;
-        }
-        
-        $n_bytes_consumed = $reader->tell() - $header->offset;
-        if ($n_bytes_consumed > $header->size) {
-            throw new KnyttBinException("Map function consumed more bytes than the file contained");
-        }
-        
-        $reader->skip($header->size - $n_bytes_consumed);
-        $header = parse_header($reader, $options);
-    }
-
-    return $results;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
