@@ -35,14 +35,86 @@ class ParseOptions {
      */
     public int $max_path_len;
 
+    /**
+     * @var array<string> List of file extensions that are not allowed, such as `"exe"`.
+     */
+    public array $forbidden_extensions;
+
     public function __construct(
-        $convert_to_encoding = null,
-        $force_unix_separator = true,
-        $max_path_len = 256
+        ?string $convert_to_encoding = null,
+        bool $force_unix_separator = true,
+        int $max_path_len = 256,
+        ?array $forbidden_extensions = null,
     ) {
         $this->convert_to_encoding = $convert_to_encoding;
         $this->force_unix_separator = $force_unix_separator;
         $this->max_path_len = $max_path_len;
+        if ($forbidden_extensions === null) {
+            $forbidden_extensions = [
+                // Windows executable
+                "exe",
+                "ex_",
+                "com",
+                "scr",
+                // Mac executable
+                "app",
+                "osx",
+                // Linux executable
+                "out",
+                "run",
+                // Installers
+                "msi",
+                "msp",
+                "mst",
+                "inf",
+                "inx",
+                "isu",
+                "paf",
+                // Library
+                "dll",
+                // Windows Shell Scripts
+                "bat",
+                "cmd",
+                "ps1",
+                "sct",
+                "ws",
+                "wsc",
+                "wsf",
+                "wsh",
+                // Mac/Linux Shell Scripts
+                "command",
+                "sh",
+                "csh",
+                "ksh",
+                // Scripts
+                "js",
+                "jse",
+                "py",
+                "pyw",
+                "vb",
+                "vbe",
+                "vbs",
+                // Windows Registry
+                "reg",
+                "rgs",
+                // Misc Windows
+                "cab",
+                "cpl",
+                "gadget",
+                "ins",
+                "job",
+                "lnk",
+                "msc",
+                "pif",
+                "shb",
+                "shs",
+                "u3p",
+                // Misc MacOS
+                "action",
+                "workflow",
+            ];
+        }
+        $this->forbidden_extensions = $forbidden_extensions;
     }
 }
 
@@ -97,14 +169,22 @@ function parse_header(IReader $reader, ParseOptions $options): ?Header {
         $path = $unix_path;
     }
 
+    if (substr($unix_path, -1) === "/") {
+        throw new KnyttBinException("Invalid file path: ended with slash");
+    }
+
     if (__is_absolute_path($unix_path)) {
         throw new KnyttBinException("Unsafe file path: absolute paths are forbidden");
     }
-    
+
     foreach (explode("/", $unix_path) as $part) {
         if ($part === "..") {
             throw new KnyttBinException("Unsafe file path: '..' is forbidden");
         }
+    }
+    
+    if (__has_file_extension($unix_path, $options->forbidden_extensions)) {
+        throw new KnyttBinException("Unsafe file path: forbidden extension");
     }
 
     // Convert encoding
@@ -515,4 +595,23 @@ function __is_absolute_path(string $path): bool {
         substr($path, 0, 1) === "/"     // Unix-style absolute path, e.g. /path/to/file
         || substr($path, 1, 2) === ":/" // Windows absolute path, e.g. C:/path/to/file
     );
+}
+
+/**
+ * Returns `true` extension if `$path` has any of the given extensions.
+ */
+function __has_file_extension(string $path, array $extensions): string {
+    $dot_idx = strrpos($path, ".");
+    if ($dot_idx === false) {
+        return false;
+    }
+
+    $path_ext = substr($path, $dot_idx + 1);
+    foreach ($extensions as $ext) {
+        if (strcasecmp($path_ext, $ext) === 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
