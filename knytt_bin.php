@@ -397,7 +397,7 @@ function find_one_file(
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string> A dictionary of file paths to contents. Excludes paths that are not found.
+ * @return array<string, string> A dictionary of file paths to contents. Excludes paths that are not found.
  */
 function read_files(
     IReader $reader,
@@ -560,7 +560,7 @@ function extract_one_file(
  * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string, Header> A dictionary of file paths to headers.
+ * @return bool Whether the .knytt.bin contains a valid level.
  */
 function is_valid_level(IReader $reader, ?ParseOptions $options = null): bool {
     try {
