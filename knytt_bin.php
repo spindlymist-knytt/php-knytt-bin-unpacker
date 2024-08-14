@@ -291,6 +291,63 @@ function find_one_file(
 }
 
 /**
+ * Reads the contents of the specified paths in a .knytt.bin file.
+ *
+ * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
+ *     be consumed for each file up to and including the last one found (the reader will point to the
+ *     first byte of the next header). If any file is not found, the entire reader will be consumed.
+ * @param array<string> $paths The list of paths to search for.
+ * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
+ * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
+ *
+ * @return array<string> A dictionary of file paths to contents. Excludes paths that are not found.
+ */
+function read_files(
+    IReader $reader,
+    array $paths,
+    bool $case_sensitive = false,
+    ?ParseOptions $options = null
+) {
+    return map_files(
+        $reader,
+        $paths,
+        __make_comp_func($case_sensitive),
+        function ($path, $header, $reader) {
+            return $reader->read($header->size);
+        },
+        $options
+    );
+}
+
+/**
+ * Reads the contents of a single file in a .knytt.bin file.
+ *
+ * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
+ *     be consumed up to and including the matching entry (the reader will point to the first byte of the
+ *     next header). If the file is not found, the entire reader will be consumed.
+ * @param string $path The path to search for.
+ * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
+ * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
+ *
+ * @return ?string The contents of that file, or `null` if it was not found.
+ */
+function read_one_file(
+    IReader $reader,
+    string $path,
+    bool $case_sensitive = false,
+    ?ParseOptions $options = null
+) {
+    $files = read_files($reader, [$path], $case_sensitive, $options);
+
+    if (array_key_exists($path, $files)) {
+        return $files[$path];
+    }
+    else {
+        return null;
+    }
+}
+
+/**
  * Extracts all files from a .knytt.bin file into the given directory.
  *
  * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
