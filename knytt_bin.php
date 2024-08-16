@@ -216,67 +216,25 @@ function parse_header(IReader $reader, ParseOptions $options): ?Header {
 }
 
 /**
- * Executes a function for each file in a .knytt.bin file and collects the results in a dictionary.
+ * Executes a function for each file header in a .knytt.bin file and collects the results in a dictionary.
+ * 
+ * For each header, the value returned by `$map_func` is stored under the key returned by `$key_func`.
  *
  * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
- * @param callable(string, Header, IReader): mixed $map_func A function that will be called for each file header.
- *     The first parameter is the path of the file. The second parameter is the entire header. The third parameter
- *     is a reader pointing to the first byte of the file's contents. The function may consume zero or more bytes,
- *     but must not consume more bytes than the header's size. The return value of the function will be added to
- *     the dictionary under the file's path.
+ * @param callable(Header): string|int|null $key_func A function that maps each file header to a key. If the function
+ *     return `null`, the entry will be skipped. Thus, `$key_func` also serves as a filter.
+ * @param callable(string|int, Header, IReader): mixed $map_func A function that maps each file header to some value.
+ *     
+ *     The first parameter is the key returned by `$key_func`. The second parameter is the file header. The third
+ *     parameter is a reader pointing to the first byte of the file's contents. The function may consume zero or
+ *     more bytes, but must not consume more bytes than the header's size.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string, mixed> A dictionary of file paths to $map_func return values.
+ * @return array<string, mixed> A dictionary that maps `$key_func` return values to `$map_func` return values.
  */
-function map_all_files(IReader $reader, callable $map_func, ?ParseOptions $options = null): array {
-    if ($options === null) {
-        $options = new ParseOptions();
-    }
-
-    parse_header($reader, $options); // Skip first header
-
-    $results = [];
-    $header = parse_header($reader, $options);
-
-    while ($header !== null) {
-        $results[$header->path] = call_user_func($map_func, $header->path, $header, $reader);
-
-        $n_bytes_consumed = $reader->tell() - $header->offset;
-        if ($n_bytes_consumed > $header->size) {
-            throw new KnyttBinException("Map function consumed more bytes than the file contained");
-        }
-        
-        $reader->skip($header->size - $n_bytes_consumed);
-        $header = parse_header($reader, $options);
-    }
-
-    return $results;
-}
-
-/**
- * Executes a function for specified paths in a .knytt.bin file and collects the results in a dictionary.
- *
- * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
- *     be consumed for each file up to and including the last one found (the reader will point to the
- *     first byte of the next header). If any file is not found, the entire reader will be consumed.
- * @param array<string> $paths The list of paths to map.
- * @param callable(string, string): bool $comp_func A function to compare paths. The first parameter is
- *     the entry in $paths. The second parameter is the path from the header. The function should return `true`
- *     if the paths are the same. This enables case-insensitive comparisons.
- * @param callable(string, Header, IReader): mixed $map_func A function that will be called for each file header.
- *     The first parameter is the path of the file as specified in $paths. The second parameter is the entire header.
- *     The third parameter is a reader pointing to the first byte of the file's contents. The function may consume
- *     zero or more bytes, but must not consume more bytes than the header's size. The return value of the function
- *     will be added to the dictionary under the file's path as specified in $paths.
- * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
- *
- * @return array<string, mixed> A dictionary of file paths to $map_func return values. The keys will be
- *     those specified in $paths, not those in the .knytt.bin file. Excludes paths that are not found.
- */
-function map_files(
+function map_all_entries(
     IReader $reader,
-    array $paths,
-    callable $comp_func,
+    callable $key_func,
     callable $map_func,
     ?ParseOptions $options = null
 ): array {
@@ -287,19 +245,15 @@ function map_files(
     parse_header($reader, $options); // Skip first header
 
     $results = [];
-    $n_remaining = count($paths);
     $header = parse_header($reader, $options);
-    
-    while ($header !== null && $n_remaining > 0) {
-        [$key, $path] = __match_first($header->path, $paths, $comp_func);
 
-        if ($path !== null) {
-            $results[$path] = call_user_func($map_func, $path, $header, $reader);
+    while ($header !== null) {
+        $key = call_user_func($key_func, $header);
 
-            unset($paths[$key]);
-            $n_remaining--;
+        if ($key !== null) {
+            $results[$key] = call_user_func($map_func, $key, $header, $reader);
         }
-        
+
         $n_bytes_consumed = $reader->tell() - $header->offset;
         if ($n_bytes_consumed > $header->size) {
             throw new KnyttBinException("Map function consumed more bytes than the file contained");
@@ -313,17 +267,20 @@ function map_files(
 }
 
 /**
- * Parses all of the file headers in a .knytt.bin file.
+ * Parses all of the headers in a .knytt.bin file.
  *
  * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string, Header> A dictionary of file paths to headers.
+ * @return array<string, Header> A dictionary that maps file paths to headers.
  */
 function list_all_files(IReader $reader, ?ParseOptions $options = null): array {
-    return map_all_files(
+    return map_all_entries(
         $reader,
-        function ($path, $header, $reader) {
+        function ($header) {
+            return $header->path;
+        },
+        function ($key, $header, $reader) {
             return $header;
         },
         $options
@@ -331,16 +288,15 @@ function list_all_files(IReader $reader, ?ParseOptions $options = null): array {
 }
 
 /**
- * Parses headers for specified paths in a .knytt.bin file.
+ * Parses headers for the specified files in a .knytt.bin file.
  *
- * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
- *     be consumed for each file up to and including the last one found (the reader will point to the
- *     first byte of the next header). If any file is not found, the entire reader will be consumed.
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
  * @param array<string> $paths The list of paths to search for.
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string, Header> A dictionary of file paths to headers. Excludes paths that are not found.
+ * @return array<string, Header> A dictionary that maps file paths to headers. Excludes paths that are not found.
+ *     The keys will match those provided in `$paths`.
  */
 function find_files(
     IReader $reader,
@@ -348,11 +304,10 @@ function find_files(
     bool $case_sensitive = false,
     ?ParseOptions $options = null
 ): array {
-    return map_files(
+    return map_all_entries(
         $reader,
-        $paths,
-        __make_comp_func($case_sensitive),
-        function ($path, $header, $reader) {
+        __make_key_func($paths, $case_sensitive),
+        function ($key, $header, $reader) {
             return $header;
         },
         $options
@@ -362,9 +317,7 @@ function find_files(
 /**
  * Parses the header for a single file in a .knytt.bin file.
  *
- * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
- *     be consumed up to and including the matching entry (the reader will point to the first byte of the
- *     next header). If the file is not found, the entire reader will be consumed.
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
  * @param string $path The path to search for.
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
@@ -388,16 +341,15 @@ function find_one_file(
 }
 
 /**
- * Reads the contents of the specified paths in a .knytt.bin file.
+ * Reads the contents of the specified files in a .knytt.bin file.
  *
- * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
- *     be consumed for each file up to and including the last one found (the reader will point to the
- *     first byte of the next header). If any file is not found, the entire reader will be consumed.
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
  * @param array<string> $paths The list of paths to search for.
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string, string> A dictionary of file paths to contents. Excludes paths that are not found.
+ * @return array<string, string> A dictionary that maps file paths to their contents. Excludes paths that are not found.
+ *     The keys will match those provided in `$paths`.
  */
 function read_files(
     IReader $reader,
@@ -405,11 +357,10 @@ function read_files(
     bool $case_sensitive = false,
     ?ParseOptions $options = null
 ) {
-    return map_files(
+    return map_all_entries(
         $reader,
-        $paths,
-        __make_comp_func($case_sensitive),
-        function ($path, $header, $reader) {
+        __make_key_func($paths, $case_sensitive),
+        function ($key, $header, $reader) {
             return $reader->read($header->size);
         },
         $options
@@ -419,9 +370,7 @@ function read_files(
 /**
  * Reads the contents of a single file in a .knytt.bin file.
  *
- * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
- *     be consumed up to and including the matching entry (the reader will point to the first byte of the
- *     next header). If the file is not found, the entire reader will be consumed.
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
  * @param string $path The path to search for.
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
@@ -445,19 +394,18 @@ function read_one_file(
 }
 
 /**
- * Extracts all files from a .knytt.bin file into the given directory.
+ * Extracts all files from a .knytt.bin file into a given directory.
  *
  * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
- * @param string $output_dir (optional) The directory to extract the files to. The directory will be
- *     created if it does not exist. Defaults to the current working directory.
+ * @param string $output_dir (optional) The directory to extract the files to. The directory will be created if
+ *     it does not exist. Defaults to the current working directory.
  * @param int $max_file_size (optional) The maximum number of bytes allowed to be extracted for a single file. A
  *     `KnyttBinException` will be raised if a file is too large. Defaults to 256 MiB.
- * @param ?callable(string): string $map_path_func (optional) A function that maps each path to a new one.
- *     This could be used to add the level's name as prefix or normalize case, for example. The mapped
- *     path is relative to `$output_dir`.
+ * @param ?callable(string): string $map_path_func (optional) A function that maps each path to a new one. This
+ *     could be used to add the level name as prefix, for example. The mapped path is relative to `$output_dir`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string, Header> A dictionary of file paths to headers.
+ * @return array<string, Header> A dictionary that maps file paths to headers.
  */
 function extract_all_files(
     IReader $reader,
@@ -466,31 +414,32 @@ function extract_all_files(
     ?callable $map_path_func = null,
     ?ParseOptions $options = null
 ): array {
-    return map_all_files(
+    return map_all_entries(
         $reader,
+        function ($header) {
+            return $header->path;
+        },
         __make_extract_func($output_dir, $max_file_size, $map_path_func),
         $options
     );
 }
 
 /**
- * Extracts specified paths from a .knytt.bin file into the given directory.
+ * Extracts the specified files from a .knytt.bin file into a given directory.
  *
- * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
- *     be consumed for each file up to and including the last one found (the reader will point to the
- *     first byte of the next header). If any file is not found, the entire reader will be consumed.
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
  * @param array<string> $paths The list of paths to extract.
- * @param string $output_dir (optional) The directory to extract the files to. The directory will be
- *     created if it does not exist. Defaults to the current working directory.
+ * @param string $output_dir (optional) The directory to extract the files to. The directory will be created if
+ *     it does not exist. Defaults to the current working directory.
  * @param int $max_file_size (optional) The maximum number of bytes allowed to be extracted for a single file. A
  *     `KnyttBinException` will be raised if a file is too large. Defaults to 256 MiB.
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to false.
- * @param ?callable(string): string $map_path_func (optional) A function that maps each path to a new one.
- *     This could be used to add the level's name as prefix or normalize case, for example. The mapped
- *     path is relative to $output_dir.
+ * @param ?callable(string): string $map_path_func (optional) A function that maps each path to a new one. This
+ *     could be used to add the level name as prefix, for example. The mapped path is relative to `$output_dir`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
- * @return array<string, Header> A dictionary of file paths to headers. Excludes paths that are not found.
+ * @return array<string, Header> A dictionary that maps file paths to headers. Excludes paths that are not found.
+ *     The keys will match those provided in `$paths`.
  */
 function extract_files(
     IReader $reader,
@@ -501,10 +450,9 @@ function extract_files(
     ?callable $map_path_func = null,
     ?ParseOptions $options = null
 ): array {
-    return map_files(
+    return map_all_entries(
         $reader,
-        $paths,
-        __make_comp_func($case_sensitive),
+        __make_key_func($paths, $case_sensitive),
         __make_extract_func($output_dir, $max_file_size, $map_path_func),
         $options
     );
@@ -513,13 +461,11 @@ function extract_files(
 /**
  * Extracts a single file from a .knytt.bin file.
  *
- * @param IReader $reader A reader pointing to the start of the file. The headers and file contents will
- *     be consumed up to and including the matching entry (the reader will point to the first byte of the
- *     next header). If the file is not found, the entire reader will be consumed.
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
  * @param string $path The path of the file to extract.
- * @param string $output_path The path to write the extracted file to, relative to the output directory.
- * @param string $output_dir (optional) The directory to extract the file to. The directory will be
- *     created if it does not exist. Defaults to the current working directory.
+ * @param string $output_path The path to write the extracted file to relative to the output directory.
+ * @param string $output_dir (optional) The directory to extract the files to. The directory will be created if
+ *     it does not exist. Defaults to the current working directory.
  * @param bool $case_sensitive (optional) Whether paths should match in case. Defaults to `false`.
  * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
  *
@@ -551,24 +497,6 @@ function extract_one_file(
     }
     else {
         return null;
-    }
-}
-
- /**
- * Returns `true` if a .knytt.bin appears to contain a valid level.
- *
- * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
- * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
- *
- * @return bool Whether the .knytt.bin contains a valid level.
- */
-function is_valid_level(IReader $reader, ?ParseOptions $options = null): bool {
-    try {
-        validate_level($reader, $options);
-        return true;
-    }
-    catch (KnyttBinException $e) {
-        return false;
     }
 }
 
@@ -607,22 +535,52 @@ function validate_level(IReader $reader, ?ParseOptions $options = null): array {
     return $headers;
 }
 
+ /**
+ * Returns `true` if a .knytt.bin appears to contain a valid level.
+ *
+ * @param IReader $reader A reader pointing to the start of the file. The entire reader will be consumed.
+ * @param ParseOptions $options (optional) Configures the behavior of the parser. If `null`, the defaults will be used.
+ *
+ * @return bool Whether the .knytt.bin contains a valid level.
+ */
+function is_valid_level(IReader $reader, ?ParseOptions $options = null): bool {
+    try {
+        validate_level($reader, $options);
+        return true;
+    }
+    catch (KnyttBinException $e) {
+        return false;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback helpers
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Makes a function that compares two strings with or without case sensitivity depending on `$case_sensitive`.
+ * Makes a function that determines if a given path is present in `$paths` (with or without case sensitivity). If
+ * it is, it returns the matching element of `$paths`. Otherwise, it returns `null`.
  */
-function __make_comp_func(bool $case_sensitive): callable {
+function __make_key_func(array $paths, bool $case_sensitive): callable {
     if ($case_sensitive) {
-        return function ($a, $b) {
-            return $a === $b;
+        return function ($header) use ($paths) {
+            $i = array_search($header->path, $paths);
+            if ($i === null) {
+                return null;
+            }
+            else {
+                return $paths[$i];
+            }
         };
     }
     else {
-        return function ($a, $b) {
-            return strcasecmp($a, $b) === 0;
+        return function ($header) use ($paths) {
+            foreach ($paths as $path) {
+                if (strcasecmp($path, $header->path) === 0) {
+                    return $path;
+                }
+            }
+            return null;
         };
     }
 }
@@ -659,18 +617,13 @@ function __make_extract_func(string $output_dir, int $max_file_size, ?callable $
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * Finds the first value in `$haystack` for which `$comp_func` returns `true`, returning `[$key, $value]`. If
- * there are no matching entries, `[null, null]` is returned instead.
+ * Creates the directory that contains `$path` if it doesn't already exist.
  */
-function __match_first($needle, array $haystack, callable $comp_func): array {
-    foreach ($haystack as $key => $value) {
-        $is_match = call_user_func($comp_func, $needle, $value);
-        if ($is_match) {
-            return [$key, $value];
-        }
+function __create_parent_dir(string $path): void {
+    $dir = dirname($path);
+    if (!is_dir($dir)) {
+        mkdir($dir, 0777, true);
     }
-
-    return [null, null];
 }
 
 /**
@@ -685,16 +638,6 @@ function __join_paths(string ...$paths): string {
 
     // Replace repeated slashes (Unix-style only)
     return preg_replace('#/{2,}#', '/', join('/', $paths));
-}
-
-/**
- * Creates the directory that contains `$path` if it doesn't already exist.
- */
-function __create_parent_dir(string $path): void {
-    $dir = dirname($path);
-    if (!is_dir($dir)) {
-        mkdir($dir, 0777, true);
-    }
 }
 
 /**
