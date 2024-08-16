@@ -519,6 +519,16 @@ function is_valid_level(IReader $reader, ?ParseOptions $options = null): bool {
     }
 }
 
+/**
+ * Returns `true` if the path should be compatible with KS.
+ * 
+ * KS cannot install a .knytt.bin if its path cannot be losslessly transcoded to Windows-1252. This function may not
+ * be perfectly accurate.
+ */
+function is_ks_compatible_path(string $path, string $encoding): bool {
+    return iconv($encoding, "WINDOWS-1252", $path) !== false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Callback helpers
 ////////////////////////////////////////////////////////////////////////////////////////////////////
