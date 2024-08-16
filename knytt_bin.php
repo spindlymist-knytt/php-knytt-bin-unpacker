@@ -39,7 +39,8 @@ class ParseOptions {
     public ?string $convert_to_encoding;
 
     /**
-     * @var bool If `true`, a dot (period)
+     * @var bool If `true`, a level directory name containing a dot (period) will be rejected. This mimics the
+     *     behavior of the Directory Packer extension used by KS.
      */
     public bool $reject_dot_in_top_level_dir;
 
