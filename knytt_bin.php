@@ -27,10 +27,21 @@ interface IReader {
 
 class ParseOptions {
     /**
+     * @var array<string> List of file extensions that are permitted. Defaults to ini, bin, ogg, png, txt, html,
+     *     lua, bkup, and temp.
+     */
+    public array $allowed_extensions;
+
+    /**
      * @var ?string If non-null, paths will be converted to the specified character encoding. The encoding
      *     must be supported by `iconv`. Defaults to `null`.
      */
     public ?string $convert_to_encoding;
+
+    /**
+     * @var bool If `true`, a dot (period)
+     */
+    public bool $reject_dot_in_top_level_dir;
 
     /**
      * @var bool If `true`, paths will be converted to Unix-style separators (forward slash). Defaults to `true`.
@@ -43,86 +54,22 @@ class ParseOptions {
      */
     public int $max_path_len;
 
-    /**
-     * @var array<string> List of file extensions that are not allowed, such as `"exe"`.
-     */
-    public array $forbidden_extensions;
-
     public function __construct(
+        ?array $allowed_extensions = null,
         ?string $convert_to_encoding = null,
+        bool $reject_dot_in_top_level_dir = false,
         bool $force_unix_separator = true,
         int $max_path_len = 256,
-        ?array $forbidden_extensions = null,
     ) {
+        if ($allowed_extensions === null) {
+            $allowed_extensions = ["ini", "bin", "ogg", "png", "txt", "html", "lua", "bkup", "temp"];
+        }
+
+        $this->allowed_extensions = $allowed_extensions;
         $this->convert_to_encoding = $convert_to_encoding;
+        $this->reject_dot_in_top_level_dir = $reject_dot_in_top_level_dir;
         $this->force_unix_separator = $force_unix_separator;
         $this->max_path_len = $max_path_len;
-        if ($forbidden_extensions === null) {
-            $forbidden_extensions = [
-                // Windows executable
-                "exe",
-                "ex_",
-                "com",
-                "scr",
-                // Mac executable
-                "app",
-                "osx",
-                // Linux executable
-                "out",
-                "run",
-                // Installers
-                "msi",
-                "msp",
-                "mst",
-                "inf",
-                "inx",
-                "isu",
-                "paf",
-                // Library
-                "dll",
-                // Windows Shell Scripts
-                "bat",
-                "cmd",
-                "ps1",
-                "sct",
-                "ws",
-                "wsc",
-                "wsf",
-                "wsh",
-                // Mac/Linux Shell Scripts
-                "command",
-                "sh",
-                "csh",
-                "ksh",
-                // Scripts
-                "js",
-                "jse",
-                "py",
-                "pyw",
-                "vb",
-                "vbe",
-                "vbs",
-                // Windows Registry
-                "reg",
-                "rgs",
-                // Misc Windows
-                "cab",
-                "cpl",
-                "gadget",
-                "ins",
-                "job",
-                "lnk",
-                "msc",
-                "pif",
-                "shb",
-                "shs",
-                "u3p",
-                // Misc MacOS
-                "action",
-                "workflow",
-            ];
-        }
-        $this->forbidden_extensions = $forbidden_extensions;
     }
 }
 
@@ -131,13 +78,21 @@ class ParseOptions {
  * 
  * @param IReader $reader A reader pointing to the first byte of a header.
  * @param ParseOptions $options Configures the behavior of the parser.
+ * @param bool $is_first_header (optional) Set this to `true` when parsing the first header in the file, which
+ *     describes the top-level directory. Defaults to `false`.
  *
- * @throws KnyttBinException If the header is invalid or the path is forbidden. A path is forbidden if
- *     any component is .. or if it is absolute.
+ * @throws KnyttBinException If the header is invalid or the path is forbidden. A path is forbidden if:
+ * 
+ *     - it ends with a slash
+ *     - it is absolute
+ *     - any component is `.` or `..`
+ *     - its extension is not allowed
+ *     
+ *     For the first header only, the "extension" is ignored and it may not contain a slash.
  *
  * @return ?Header The header that was parsed, or null if there are no bytes left in the reader.
  */
-function parse_header(IReader $reader, ParseOptions $options): ?Header {
+function parse_header(IReader $reader, ParseOptions $options, bool $is_first_header = false): ?Header {
     // Check signature. Should always be NF
     
     $signature = $reader->read(2);
@@ -170,7 +125,7 @@ function parse_header(IReader $reader, ParseOptions $options): ?Header {
     }
 
     if (substr($unix_path, -1) === "/") {
-        throw new KnyttBinException("Invalid file path: ended with slash");
+        throw new KnyttBinException("Invalid file path: ends with slash");
     }
 
     if (__is_absolute_path($unix_path)) {
@@ -178,13 +133,23 @@ function parse_header(IReader $reader, ParseOptions $options): ?Header {
     }
 
     foreach (explode("/", $unix_path) as $part) {
-        if ($part === "..") {
-            throw new KnyttBinException("Unsafe file path: '..' is forbidden");
+        if ($part == "." || $part === "..") {
+            throw new KnyttBinException("Unsafe file path: `.` and `..` are forbidden");
         }
     }
     
-    if (__has_file_extension($unix_path, $options->forbidden_extensions)) {
-        throw new KnyttBinException("Unsafe file path: forbidden extension");
+    if ($is_first_header) {
+        if (strpos($unix_path, "/") !== false) {
+            throw new KnyttBinException("Invalid file path: slash in top-level directory");
+        }
+        if ($options->reject_dot_in_top_level_dir && strpos($unix_path, ".") !== false) {
+            throw new KnyttBinException("Invalid file path: dot in top-level directory");
+        }
+    }
+    else {
+        if (!__has_file_extension($unix_path, $options->allowed_extensions)) {
+            throw new KnyttBinException("Invalid file path: extension is not allowed");
+        }
     }
 
     // Convert encoding
@@ -242,7 +207,8 @@ function map_all_entries(
         $options = new ParseOptions();
     }
 
-    parse_header($reader, $options); // Skip first header
+    // Skip first header
+    parse_header($reader, $options, true);
 
     $results = [];
     $header = parse_header($reader, $options);
@@ -627,8 +593,7 @@ function __create_parent_dir(string $path): void {
 }
 
 /**
- * Joins two or more paths together without repeated slashes. IMPORTANT: Only works
- * with `/` as the path separator.
+ * Joins two or more paths together without repeated slashes. IMPORTANT: Only works with `/` as the path separator.
  */
 function __join_paths(string ...$paths): string {
     // Remove empty paths
@@ -651,7 +616,7 @@ function __is_absolute_path(string $path): bool {
 }
 
 /**
- * Returns `true` extension if `$path` has any of the given extensions.
+ * Returns `true` extension if `$path` has any of the given extensions. The comparison is case insensitive.
  */
 function __has_file_extension(string $path, array $extensions): string {
     $dot_idx = strrpos($path, ".");
@@ -661,7 +626,7 @@ function __has_file_extension(string $path, array $extensions): string {
 
     $path_ext = substr($path, $dot_idx + 1);
     foreach ($extensions as $ext) {
-        if (strcasecmp($path_ext, $ext) === 0) {
+        if (strcasecmp($ext, $path_ext) === 0) {
             return true;
         }
     }
